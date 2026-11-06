@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>예약 현황</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{--p:#e8789a;--pl:#fdeef3;--pb:#f6c9d7;--t:#4a3a40;--s:#8a7a80;--x:#4a3a40;--r:#c9c2c5}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:transparent}
+body{font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:var(--t);word-break:keep-all;padding:4px}
+.card{background:#fff;border:1px solid var(--pb);border-radius:18px;padding:20px 18px 16px;max-width:732px;margin:0 auto}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.title{font-size:20px;font-weight:800}
+.nav{display:flex;gap:6px}
+.nav button{width:34px;height:34px;border-radius:50%;border:1px solid var(--pb);background:#fff;color:var(--p);font-size:16px;font-weight:800;cursor:pointer}
+.nav button:disabled{opacity:.35;cursor:default}
+.nav button:not(:disabled):hover{background:var(--pl)}
+.sub{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}
+.legend{font-size:12px;color:var(--s)}
+.legend span{display:inline-flex;align-items:center;margin-right:12px}
+.legend i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.slot{font-size:12px;font-weight:700;color:#fff;background:var(--p);border-radius:999px;padding:4px 12px}
+.slot.full{background:var(--x)}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{font-size:12px;font-weight:700;color:var(--s);padding:2px 0 8px}
+th:first-child{color:#d9708f}th:last-child{color:#7a8fc9}
+td{text-align:center;padding:5px 0;height:46px;vertical-align:top}
+.d{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;margin:3px auto 0}
+.o .dot{background:var(--p)}
+.x .d{text-decoration:line-through;color:var(--s)} .x .dot{background:var(--x)}
+.r .d{color:var(--r)} .r .dot{background:var(--r)}
+.p .d{color:#d6d0d3} .p .dot{background:transparent}
+.today .d{background:var(--p);color:#fff !important;text-decoration:none}
+.note{text-align:center;font-size:12px;color:var(--s);margin-top:8px}
+.err{text-align:center;font-size:13px;color:var(--s);padding:40px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="top">
+    <div class="title" id="title">예약 현황</div>
+    <div class="nav"><button id="prev" aria-label="이전 달">‹</button><button id="next" aria-label="다음 달">›</button></div>
+  </div>
+  <div class="sub">
+    <div class="legend"><span><i style="background:var(--p)"></i>접수 가능</span><span><i style="background:var(--x)"></i>예약 완료</span><span><i style="background:var(--r)"></i>쉬는 날</span></div>
+    <div class="slot" id="slot" hidden></div>
+  </div>
+  <div id="cal"></div>
+  <p class="note">오늘 날짜는 분홍 동그라미로 표시돼요</p>
+</div>
+<script>
+const WD=['일','월','화','수','목','금','토'];
+const ST={'마감':'x','예약완료':'x','예약 완료':'x','휴무':'r','쉬는날':'r','쉬는 날':'r','가능':'o','접수가능':'o','접수 가능':'o'};
+let rules={days:{},weekly:{}}, slot=null;
+const pad=n=>String(n).padStart(2,'0');
+const key=(y,m,d)=>`${y}-${pad(m)}-${pad(d)}`;
+function parse(txt){
+  txt.split(/\r?\n/).forEach(raw=>{
+    const line=raw.replace(/#.*/,'').trim(); if(!line) return;
+    const i=line.indexOf(':'); if(i<0) return;
+    const left=line.slice(0,i).trim(), right=line.slice(i+1).trim();
+    if(/^남은\s*자리/.test(left)){slot=right;return;}
+    const st=ST[right.replace(/\s+/g,' ')]||ST[right.replace(/\s/g,'')]; if(!st) return;
+    const w=left.match(/^매주\s*([일월화수목금토])/);
+    if(w){rules.weekly[WD.indexOf(w[1])]=st;return;}
+    const r=left.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s*(?:~\s*(\d{4})-(\d{1,2})-(\d{1,2}))?$/);
+    if(!r) return;
+    const a=new Date(+r[1],+r[2]-1,+r[3]); const b=r[4]?new Date(+r[4],+r[5]-1,+r[6]):a;
+    for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)) rules.days[key(d.getFullYear(),d.getMonth()+1,d.getDate())]=st;
+  });
+}
+const now=new Date(); now.setHours(0,0,0,0);
+let vy=now.getFullYear(), vm=now.getMonth();
+function render(){
+  document.getElementById('title').textContent=`${vy}년 ${vm+1}월`;
+  document.getElementById('prev').disabled=(vy===now.getFullYear()&&vm===now.getMonth());
+  const first=new Date(vy,vm,1).getDay(), last=new Date(vy,vm+1,0).getDate();
+  let h='<table><tr>'+WD.map(w=>`<th>${w}</th>`).join('')+'</tr><tr>';
+  for(let i=0;i<first;i++) h+='<td></td>';
+  for(let d=1;d<=last;d++){
+    const dt=new Date(vy,vm,d), k=key(vy,vm+1,d);
+    let st = dt<now ? 'p' : (rules.days[k] || rules.weekly[dt.getDay()] || 'o');
+    const tdy = dt.getTime()===now.getTime() ? ' today':'';
+    h+=`<td class="${st}${tdy}"><span class="d">${d}</span><div class="dot"></div></td>`;
+    if((first+d)%7===0 && d<last) h+='</tr><tr>';
+  }
+  h+='</tr></table>';
+  document.getElementById('cal').innerHTML=h;
+}
+document.getElementById('prev').onclick=()=>{vm--; if(vm<0){vm=11;vy--;} render();};
+document.getElementById('next').onclick=()=>{vm++; if(vm>11){vm=0;vy++;} render();};
+fetch('schedule.txt?t='+Date.now()).then(r=>{if(!r.ok) throw 0; return r.text();}).then(t=>{
+  parse(t);
+  if(slot){const el=document.getElementById('slot'); const m=slot.match(/^(\d+)/); el.hidden=false;
+    if(m && +m[1]===0){el.textContent='모집 마감'; el.classList.add('full');} else el.textContent='남은 자리 '+slot;}
+  render();
+}).catch(()=>{render();});
+</script>
+</body>
+</html>
